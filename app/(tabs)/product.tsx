@@ -1,15 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import {
-  Alert,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import React, { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedView } from '@/components/themed-view';
@@ -18,118 +8,93 @@ import { Header } from '@/components/ui/header';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useFocusEffect } from '@react-navigation/native';
 
-// Database services
-import { ProductInterface } from '@/models/product';
-import { ProductRecipeInterface } from '@/models/product_recipes';
-import { StockInterface } from '@/models/stock';
-import { ProductRecipeService, ProductService, StockService } from '@/services/database';
-
-// Enhanced Product interface for UI
-interface Product extends ProductInterface {
-  stock?: number;
-  icon?: string;
-  iconColor?: string;
-  backgroundColor?: string;
+interface Product {
+  id: string;
+  name: string;
+  sku: string;
+  price: number;
+  stock: number;
+  isLowStock: boolean;
+  icon: string;
+  iconColor: string;
+  backgroundColor: string;
 }
 
-// Recipe interface for UI
-interface Recipe extends ProductRecipeInterface {
-  stockName: string;
-  stockSku: string;
-}
+type ViewMode = 'list' | 'detail';
 
-type ViewMode = 'list' | 'detail' | 'form';
+const productData: Product[] = [
+  {
+    id: '1',
+    name: 'Wireless Mouse',
+    sku: 'WM-001',
+    price: 29.99,
+    stock: 45,
+    isLowStock: false,
+    icon: 'computer.mouse.fill',
+    iconColor: '#3b82f6',
+    backgroundColor: '#dbeafe'
+  },
+  {
+    id: '2',
+    name: 'USB Cable',
+    sku: 'UC-002',
+    price: 12.99,
+    stock: 8,
+    isLowStock: true,
+    icon: 'cable.connector',
+    iconColor: '#ef4444',
+    backgroundColor: '#fee2e2'
+  },
+  {
+    id: '3',
+    name: 'Keyboard',
+    sku: 'KB-003',
+    price: 59.99,
+    stock: 23,
+    isLowStock: false,
+    icon: 'keyboard.fill',
+    iconColor: '#8b5cf6',
+    backgroundColor: '#ede9fe'
+  },
+  {
+    id: '4',
+    name: 'Monitor Stand',
+    sku: 'MS-004',
+    price: 39.99,
+    stock: 5,
+    isLowStock: true,
+    icon: 'display',
+    iconColor: '#f59e0b',
+    backgroundColor: '#fef3c7'
+  },
+  {
+    id: '5',
+    name: 'Laptop Sleeve',
+    sku: 'LS-005',
+    price: 24.99,
+    stock: 67,
+    isLowStock: false,
+    icon: 'laptopcomputer',
+    iconColor: '#06b6d4',
+    backgroundColor: '#cffafe'
+  },
+  {
+    id: '6',
+    name: 'Laptop Sleeve',
+    sku: 'LS-005',
+    price: 24.99,
+    stock: 67,
+    isLowStock: false,
+    icon: 'laptopcomputer',
+    iconColor: '#06b6d4',
+    backgroundColor: '#cffafe'
+  }
+];
 
-export default function ProductScreen() {
+export default function TabTwoScreen() {
   const [searchText, setSearchText] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [productRecipes, setProductRecipes] = useState<Recipe[]>([]);
-  const [stocks, setStocks] = useState<StockInterface[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  // Form states
-  const [formData, setFormData] = useState({
-    nama: '',
-    code: '',
-    price: '',
-    isHaveRecipes: false
-  });
-
-  // Recipe modal states
-  const [showRecipeModal, setShowRecipeModal] = useState(false);
-  const [newRecipe, setNewRecipe] = useState({
-    stockId: '',
-    amount: ''
-  });
-
-  // Helper function to add UI properties to products
-  const enhanceProduct = (product: ProductInterface): Product => {
-    const iconMap: { [key: string]: { icon: string; iconColor: string; backgroundColor: string } } = {
-      'WM': { icon: 'computer.mouse.fill', iconColor: '#3b82f6', backgroundColor: '#dbeafe' },
-      'GK': { icon: 'keyboard.fill', iconColor: '#8b5cf6', backgroundColor: '#ede9fe' },
-      'UC': { icon: 'cable.connector', iconColor: '#ef4444', backgroundColor: '#fee2e2' },
-      'MS': { icon: 'display', iconColor: '#f59e0b', backgroundColor: '#fef3c7' },
-    };
-
-    const codePrefix = product.code.split('-')[0];
-    const uiProps = iconMap[codePrefix] || { icon: 'bag.fill', iconColor: '#3b82f6', backgroundColor: '#dbeafe' };
-
-    return {
-      ...product,
-      stock: 0, // This would come from inventory system
-      ...uiProps
-    };
-  };
-
-  // Load data functions
-  const loadProducts = React.useCallback(async (searchTerm?: string) => {
-    setLoading(true);
-    try {
-      let productData: ProductInterface[];
-      if (searchTerm) {
-        productData = await ProductService.searchProducts(searchTerm);
-      } else {
-        productData = await ProductService.getAllProducts();
-      }
-      const enhancedProducts = productData.map(enhanceProduct);
-      setProducts(enhancedProducts);
-    } catch (error) {
-      console.error('Error loading products:', error);
-      Alert.alert('Error', 'Failed to load products');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const loadStocks = React.useCallback(async () => {
-    try {
-      await StockService.initializeSampleData(); // Initialize sample data if needed
-      const stockData = await StockService.getAllStocks();
-      setStocks(stockData);
-    } catch (error) {
-      console.error('Error loading stocks:', error);
-      Alert.alert('Error', 'Failed to load stock data');
-    }
-  }, []);
-
-  const loadProductRecipes = React.useCallback(async (productId: number) => {
-    try {
-      const recipes = await ProductRecipeService.getRecipesByProductId(productId);
-      setProductRecipes(recipes);
-    } catch (error) {
-      console.error('Error loading product recipes:', error);
-      Alert.alert('Error', 'Failed to load product recipes');
-    }
-  }, []);
-
-  // Initialize data on component mount
-  useEffect(() => {
-    loadProducts();
-    loadStocks();
-  }, [loadProducts, loadStocks]);
 
   // Reset to list view when tab is focused
   useFocusEffect(
@@ -137,279 +102,23 @@ export default function ProductScreen() {
       setViewMode('list');
       setSelectedProduct(null);
       setSearchText('');
-      loadProducts(); // Refresh products when tab is focused
-    }, [loadProducts])
+    }, [])
   );
 
-  // Search effect
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (searchText.trim()) {
-        loadProducts(searchText.trim());
-      } else {
-        loadProducts();
-      }
-    }, 300); // Debounce search
+  const filteredProducts = productData.filter(product =>
+    product.name.toLowerCase().includes(searchText.toLowerCase()) ||
+    product.sku.toLowerCase().includes(searchText.toLowerCase())
+  );
 
-    return () => clearTimeout(timeoutId);
-  }, [searchText, loadProducts]);
-
-  // Navigation functions
   const handleProductPress = (product: Product) => {
     setSelectedProduct(product);
     setViewMode('detail');
-    if (product.isHaveRecipes) {
-      loadProductRecipes(product.id);
-    }
   };
 
   const handleBackToList = () => {
     setViewMode('list');
     setSelectedProduct(null);
-    setEditingProduct(null);
-    setFormData({ nama: '', code: '', price: '', isHaveRecipes: false });
   };
-
-  const handleAddProduct = () => {
-    setEditingProduct(null);
-    setFormData({ nama: '', code: '', price: '', isHaveRecipes: false });
-    setViewMode('form');
-  };
-
-  const handleEditProduct = (product: Product) => {
-    setEditingProduct(product);
-    setFormData({
-      nama: product.nama,
-      code: product.code,
-      price: product.price.toString(),
-      isHaveRecipes: product.isHaveRecipes
-    });
-    setViewMode('form');
-    if (product.isHaveRecipes) {
-      loadProductRecipes(product.id);
-    }
-  };
-
-  // Product CRUD operations
-  const handleSaveProduct = async () => {
-    if (!formData.nama || !formData.code || !formData.price) {
-      Alert.alert('Error', 'Please fill all required fields');
-      return;
-    }
-
-    if (isNaN(parseFloat(formData.price))) {
-      Alert.alert('Error', 'Please enter a valid price');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const productData = {
-        nama: formData.nama,
-        code: formData.code,
-        price: parseFloat(formData.price),
-        isHaveRecipes: formData.isHaveRecipes
-      };
-
-      if (editingProduct) {
-        await ProductService.updateProduct(editingProduct.id, productData);
-        Alert.alert('Success', 'Product updated successfully');
-      } else {
-        await ProductService.createProduct(productData);
-        Alert.alert('Success', 'Product added successfully');
-      }
-
-      setViewMode('list');
-      setFormData({ nama: '', code: '', price: '', isHaveRecipes: false });
-      setEditingProduct(null);
-      loadProducts(); // Reload products to reflect changes
-    } catch (error) {
-      console.error('Error saving product:', error);
-      Alert.alert('Error', 'Failed to save product');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeleteProduct = async (productId: number) => {
-    Alert.alert(
-      'Delete Product',
-      'Are you sure you want to delete this product? This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            setLoading(true);
-            try {
-              await ProductService.deleteProduct(productId);
-              
-              if (selectedProduct?.id === productId) {
-                setViewMode('list');
-                setSelectedProduct(null);
-              }
-              
-              loadProducts(); // Reload products to reflect changes
-              Alert.alert('Success', 'Product deleted successfully');
-            } catch (error) {
-              console.error('Error deleting product:', error);
-              Alert.alert('Error', 'Failed to delete product');
-            } finally {
-              setLoading(false);
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  // Recipe management
-  const addRecipe = async () => {
-    if (!newRecipe.stockId || !newRecipe.amount || !selectedProduct) {
-      Alert.alert('Error', 'Please fill all recipe fields');
-      return;
-    }
-
-    if (isNaN(parseFloat(newRecipe.amount))) {
-      Alert.alert('Error', 'Please enter a valid amount');
-      return;
-    }
-
-    const stockIdNum = parseInt(newRecipe.stockId);
-    const stock = stocks.find(s => s.id === stockIdNum);
-    if (!stock) return;
-
-    setLoading(true);
-    try {
-      await ProductRecipeService.createRecipe({
-        ProductId: selectedProduct.id,
-        StockId: stockIdNum,
-        amount: parseFloat(newRecipe.amount)
-      });
-
-      // Reload recipes for the current product
-      loadProductRecipes(selectedProduct.id);
-      setNewRecipe({ stockId: '', amount: '' });
-      setShowRecipeModal(false);
-      Alert.alert('Success', 'Recipe added successfully');
-    } catch (error) {
-      console.error('Error adding recipe:', error);
-      Alert.alert('Error', 'Failed to add recipe');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const removeRecipe = async (productId: number, recipeId: number) => {
-    Alert.alert(
-      'Remove Recipe',
-      'Are you sure you want to remove this recipe?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            setLoading(true);
-            try {
-              await ProductRecipeService.deleteRecipe(recipeId);
-              // Reload recipes for the current product
-              loadProductRecipes(productId);
-              Alert.alert('Success', 'Recipe removed successfully');
-            } catch (error) {
-              console.error('Error removing recipe:', error);
-              Alert.alert('Error', 'Failed to remove recipe');
-            } finally {
-              setLoading(false);
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  // Derived state
-  const filteredProducts = products.filter(product =>
-    product.nama.toLowerCase().includes(searchText.toLowerCase()) ||
-    product.code.toLowerCase().includes(searchText.toLowerCase())
-  );
-
-  // Render functions
-  const renderProductList = () => (
-    <ThemedView style={styles.container}>
-      <Header title="Products" subtitle="Manage your product catalog" />
-      
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <IconSymbol name="magnifyingglass" size={20} color="#6b7280" />
-        <TextInput 
-          placeholder="Search products by name or code..." 
-          style={styles.searchInput}
-          value={searchText}
-          onChangeText={setSearchText}
-        />
-        {searchText.length > 0 && (
-          <Pressable onPress={() => setSearchText('')}>
-            <IconSymbol name="xmark.circle.fill" size={20} color="#6b7280" />
-          </Pressable>
-        )}
-      </View>
-
-      {/* Product List */}
-      <ScrollView style={styles.productList} showsVerticalScrollIndicator={false}>
-        {filteredProducts.length === 0 ? (
-          <View style={styles.emptyState}>
-            <IconSymbol name="bag" size={48} color="#9ca3af" />
-            <Text style={styles.emptyStateText}>
-              {searchText ? 'No products found' : 'No products available'}
-            </Text>
-            <Text style={styles.emptyStateSubtext}>
-              {searchText ? 'Try adjusting your search' : 'Add your first product to get started'}
-            </Text>
-          </View>
-        ) : (
-          filteredProducts.map((product) => (
-            <Pressable 
-              key={product.id} 
-              style={styles.productCard}
-              onPress={() => handleProductPress(product)}
-            >
-              <View style={[styles.iconContainer, { backgroundColor: product.backgroundColor }]}>
-                <IconSymbol 
-                  name={product.icon || 'bag.fill'} 
-                  size={24} 
-                  color={product.iconColor || '#3b82f6'} 
-                />
-              </View>
-
-              <View style={styles.productDetails}>
-                <View style={styles.productHeader}>
-                  <Text style={styles.productName}>{product.nama}</Text>
-                  <Text style={styles.productPrice}>${product.price}</Text>
-                </View>
-                <Text style={styles.productCode}>Code: {product.code}</Text>
-                <View style={styles.productFooter}>
-                  <Text style={styles.stockText}>Stock: {product.stock || 0} units</Text>
-                  {product.isHaveRecipes && (
-                    <View style={styles.recipesBadge}>
-                      <IconSymbol name="list.bullet" size={12} color="#8b5cf6" />
-                      <Text style={styles.recipesBadgeText}>Has Recipes</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            </Pressable>
-          ))
-        )}
-      </ScrollView>
-
-      {/* Add Product Button */}
-      <Pressable style={styles.addButton} onPress={handleAddProduct}>
-        <IconSymbol name="plus" size={25} color="#ffffff" />
-      </Pressable>
-    </ThemedView>
-  );
 
   const renderProductDetail = () => {
     if (!selectedProduct) return null;
@@ -421,17 +130,13 @@ export default function ProductScreen() {
           <Pressable 
             onPress={handleBackToList} 
             style={styles.backButton}
+            android_ripple={{ color: '#ffffff30' }}
           >
             <IconSymbol name="chevron.left" size={20} color="#ffffff" />
             <Text style={styles.backButtonText}>Back</Text>
           </Pressable>
           <Text style={styles.detailTitle}>Product Detail</Text>
-          <Pressable 
-            onPress={() => handleEditProduct(selectedProduct)} 
-            style={styles.editHeaderButton}
-          >
-            <IconSymbol name="pencil" size={20} color="#3b82f6" />
-          </Pressable>
+          <View style={styles.headerSpacer} />
         </View>
 
         <ScrollView style={styles.detailContent} showsVerticalScrollIndicator={false}>
@@ -440,76 +145,83 @@ export default function ProductScreen() {
             <View style={styles.detailProductHeader}>
               <View style={[styles.detailIconContainer, { backgroundColor: selectedProduct.backgroundColor }]}>
                 <IconSymbol 
-                  name={selectedProduct.icon || 'bag.fill'} 
+                  name={selectedProduct.icon} 
                   size={40} 
-                  color={selectedProduct.iconColor || '#3b82f6'} 
+                  color={selectedProduct.iconColor} 
                 />
               </View>
               <View style={styles.detailProductInfo}>
-                <Text style={styles.detailProductName}>{selectedProduct.nama}</Text>
-                <Text style={styles.detailProductCode}>Code: {selectedProduct.code}</Text>
+                <Text style={styles.detailProductName}>{selectedProduct.name}</Text>
+                <Text style={styles.detailProductSku}>SKU: {selectedProduct.sku}</Text>
                 <Text style={styles.detailProductPrice}>${selectedProduct.price}</Text>
-                <Text style={styles.detailStockInfo}>Stock: {selectedProduct.stock || 0} units</Text>
               </View>
             </View>
           </Card>
 
-          {/* Recipes Section */}
-          {selectedProduct.isHaveRecipes && (
-            <Card style={styles.detailCard}>
-              <View style={styles.recipesHeader}>
-                <Text style={styles.sectionTitle}>Product Recipes</Text>
-                <Pressable 
-                  onPress={() => setShowRecipeModal(true)}
-                  style={styles.addRecipeButton}
-                >
-                  <IconSymbol name="plus" size={16} color="#3b82f6" />
-                  <Text style={styles.addRecipeButtonText}>Add</Text>
-                </Pressable>
+          {/* Stock Information */}
+          <Card style={styles.detailCard}>
+            <Text style={styles.sectionTitle}>Stock Information</Text>
+            <View style={styles.stockInfo}>
+              <View style={styles.stockItem}>
+                <Text style={styles.stockLabel}>Current Stock</Text>
+                <Text style={[styles.stockValue, selectedProduct.isLowStock && styles.lowStockValue]}>
+                  {selectedProduct.stock} units
+                </Text>
               </View>
-
-              {productRecipes.length > 0 ? (
-                productRecipes.map((recipe) => (
-                  <View key={recipe.id} style={styles.recipeItem}>
-                    <View style={styles.recipeInfo}>
-                      <Text style={styles.recipeName}>{recipe.stockName}</Text>
-                      <Text style={styles.recipeAmount}>{recipe.amount} pcs</Text>
-                    </View>
-                    <Pressable 
-                      onPress={() => removeRecipe(selectedProduct.id, recipe.id)}
-                      style={styles.removeRecipeButton}
-                    >
-                      <IconSymbol name="trash" size={16} color="#ef4444" />
-                    </Pressable>
-                  </View>
-                ))
-              ) : (
-                <View style={styles.noRecipesContainer}>
-                  <Text style={styles.noRecipesText}>No recipes added yet</Text>
-                  <Text style={styles.noRecipesSubtext}>Add ingredients needed to make this product</Text>
-                </View>
-              )}
-            </Card>
-          )}
+              <View style={styles.stockStatus}>
+                <View style={[
+                  styles.statusIndicator, 
+                  { backgroundColor: selectedProduct.isLowStock ? '#ef4444' : '#10b981' }
+                ]} />
+                <Text style={[
+                  styles.statusText,
+                  { color: selectedProduct.isLowStock ? '#ef4444' : '#10b981' }
+                ]}>
+                  {selectedProduct.isLowStock ? 'Low Stock' : 'In Stock'}
+                </Text>
+              </View>
+            </View>
+          </Card>
 
           {/* Quick Actions */}
           <Card style={styles.detailCard}>
             <Text style={styles.sectionTitle}>Quick Actions</Text>
             <View style={styles.actionButtons}>
-              <Pressable 
-                style={styles.actionButton}
-                onPress={() => handleEditProduct(selectedProduct)}
-              >
+              <Pressable style={styles.actionButton}>
                 <IconSymbol name="pencil" size={20} color="#3b82f6" />
                 <Text style={styles.actionButtonText}>Edit Product</Text>
               </Pressable>
-              <Pressable 
-                style={[styles.actionButton, styles.deleteActionButton]}
-                onPress={() => handleDeleteProduct(selectedProduct.id)}
-              >
-                <IconSymbol name="trash" size={20} color="#ef4444" />
-                <Text style={[styles.actionButtonText, { color: '#ef4444' }]}>Delete Product</Text>
+              <Pressable style={styles.actionButton}>
+                <IconSymbol name="plus.circle" size={20} color="#10b981" />
+                <Text style={[styles.actionButtonText, { color: '#10b981' }]}>Add Stock</Text>
               </Pressable>
+              <Pressable style={styles.actionButton}>
+                <IconSymbol name="minus.circle" size={20} color="#f59e0b" />
+                <Text style={[styles.actionButtonText, { color: '#f59e0b' }]}>Remove Stock</Text>
+              </Pressable>
+            </View>
+          </Card>
+
+          {/* Product Stats */}
+          <Card style={styles.detailCard}>
+            <Text style={styles.sectionTitle}>Product Statistics</Text>
+            <View style={styles.statsGrid}>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>$1,234</Text>
+                <Text style={styles.statLabel}>Total Value</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>45</Text>
+                <Text style={styles.statLabel}>Times Sold</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>12</Text>
+                <Text style={styles.statLabel}>Times Restocked</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>Oct 20</Text>
+                <Text style={styles.statLabel}>Last Updated</Text>
+              </View>
             </View>
           </Card>
         </ScrollView>
@@ -517,193 +229,90 @@ export default function ProductScreen() {
     );
   };
 
-  const renderProductForm = () => (
+  const renderProductList = () => (
     <ThemedView style={styles.container}>
-      {/* Header */}
-      <View style={styles.detailHeader}>
-        <Pressable onPress={handleBackToList} style={styles.backButton}>
-          <IconSymbol name="chevron.left" size={20} color="#ffffff" />
-          <Text style={styles.backButtonText}>Back</Text>
-        </Pressable>
-        <Text style={styles.detailTitle}>
-          {editingProduct ? 'Edit Product' : 'Add Product'}
-        </Text>
-        <Pressable onPress={handleSaveProduct} style={styles.saveButton}>
-          <IconSymbol name="checkmark" size={20} color="#ffffff" />
-          <Text style={styles.saveButtonText}>Save</Text>
-        </Pressable>
+      <View>
+        <Header title="Products" subtitle="Browse and manage your products" />
       </View>
 
-      <ScrollView style={styles.formContent} showsVerticalScrollIndicator={false}>
-        <Card style={styles.formCard}>
-          <Text style={styles.formSectionTitle}>Product Information</Text>
-          
-          <Text style={styles.formLabel}>Product Name *</Text>
-          <TextInput
-            style={styles.formInput}
-            value={formData.nama}
-            onChangeText={(text) => setFormData({...formData, nama: text})}
-            placeholder="Enter product name"
-          />
+      <View style={styles.searchBoxContainer}>
+        <TextInput placeholder="Search products..." style={styles.searchBox} onChangeText={setSearchText} />
+      </View>
 
-          <Text style={styles.formLabel}>Product Code *</Text>
-          <TextInput
-            style={styles.formInput}
-            value={formData.code}
-            onChangeText={(text) => setFormData({...formData, code: text})}
-            placeholder="Enter product code (e.g., WM-001)"
-          />
-
-          <Text style={styles.formLabel}>Price *</Text>
-          <TextInput
-            style={styles.formInput}
-            value={formData.price}
-            onChangeText={(text) => setFormData({...formData, price: text})}
-            placeholder="Enter price"
-            keyboardType="numeric"
-          />
-
-          <View style={styles.switchContainer}>
-            <View style={styles.switchLabelContainer}>
-              <Text style={styles.switchLabel}>Has Recipes</Text>
-              <Text style={styles.switchSubLabel}>
-                Enable if this product requires ingredients/materials
-              </Text>
+      <ScrollView style={styles.productList} showsVerticalScrollIndicator={false}>
+        {filteredProducts.map((product) => (
+          <Pressable 
+            key={product.id} 
+            style={styles.productCard}
+            onPress={() => handleProductPress(product)}
+          >
+            {/* Product Icon */}
+            <View style={[styles.iconContainer, { backgroundColor: product.backgroundColor }]}>
+              <IconSymbol name={product.icon} size={24} color={product.iconColor} />
             </View>
-            <Switch
-              value={formData.isHaveRecipes}
-              onValueChange={(value) => setFormData({...formData, isHaveRecipes: value})}
-              trackColor={{ false: '#767577', true: '#3b82f6' }}
-              thumbColor={formData.isHaveRecipes ? '#ffffff' : '#f4f3f4'}
-            />
-          </View>
-        </Card>
 
-        {/* Recipe Management in Form */}
-        {formData.isHaveRecipes && editingProduct && (
-          <Card style={styles.formCard}>
-            <View style={styles.recipesHeader}>
-              <Text style={styles.formSectionTitle}>Product Recipes</Text>
-              <Pressable 
-                onPress={() => {
-                  setSelectedProduct(editingProduct);
-                  setShowRecipeModal(true);
-                }}
-                style={styles.addRecipeButton}
-              >
-                <IconSymbol name="plus" size={16} color="#3b82f6" />
-                <Text style={styles.addRecipeButtonText}>Add</Text>
-              </Pressable>
-            </View>
-            
-            {productRecipes.map((recipe) => (
-              <View key={recipe.id} style={styles.recipeItem}>
-                <View style={styles.recipeInfo}>
-                  <Text style={styles.recipeName}>{recipe.stockName}</Text>
-                  <Text style={styles.recipeAmount}>{recipe.amount} pcs</Text>
-                </View>
-                <Pressable 
-                  onPress={() => removeRecipe(editingProduct.id, recipe.id)}
-                  style={styles.removeRecipeButton}
-                >
-                  <IconSymbol name="trash" size={16} color="#ef4444" />
-                </Pressable>
+            {/* Product Details */}
+            <View style={styles.productDetails}>
+              <View style={styles.productHeader}>
+                <Text style={styles.productName}>{product.name}</Text>
+                <Text style={styles.stockNumber}>${product.price}</Text>
               </View>
-            )) || (
-              <Text style={styles.noRecipesText}>No recipes added yet</Text>
-            )}
-          </Card>
-        )}
+              <Text style={styles.productSku}>SKU: {product.sku}</Text>
+            </View>
+          </Pressable>
+        ))}
       </ScrollView>
+
+      <Pressable style={styles.addButton}>
+        <IconSymbol name="plus" size={25} color="#ffffff" />
+      </Pressable>
     </ThemedView>
   );
 
   return (
     <ParallaxScrollView>
-      {viewMode === 'list' && renderProductList()}
-      {viewMode === 'detail' && renderProductDetail()}
-      {viewMode === 'form' && renderProductForm()}
-
-      {/* Recipe Modal */}
-      <Modal
-        visible={showRecipeModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowRecipeModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add Recipe</Text>
-              <Pressable onPress={() => setShowRecipeModal(false)}>
-                <IconSymbol name="xmark" size={24} color="#6b7280" />
-              </Pressable>
-            </View>
-
-            <Text style={styles.modalLabel}>Select Material/Ingredient</Text>
-            <View style={styles.pickerContainer}>
-              <ScrollView style={styles.stockPicker} showsVerticalScrollIndicator={false}>
-                {stocks.map((stock) => (
-                  <Pressable
-                    key={stock.id}
-                    style={[
-                      styles.stockOption,
-                      newRecipe.stockId === stock.id.toString() && styles.stockOptionSelected
-                    ]}
-                    onPress={() => setNewRecipe({...newRecipe, stockId: stock.id.toString()})}
-                  >
-                    <Text style={[
-                      styles.stockOptionText,
-                      newRecipe.stockId === stock.id.toString() && styles.stockOptionTextSelected
-                    ]}>
-                      {stock.symbol}
-                    </Text>
-                    <Text style={[
-                      styles.stockOptionSku,
-                      newRecipe.stockId === stock.id.toString() && styles.stockOptionSkuSelected
-                    ]}>
-                      {stock.sku} - ${stock.purchase_price}
-                    </Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </View>
-
-            <Text style={styles.modalLabel}>Amount Required</Text>
-            <TextInput
-              style={styles.modalInput}
-              value={newRecipe.amount}
-              onChangeText={(text) => setNewRecipe({...newRecipe, amount: text})}
-              placeholder="Enter amount"
-              keyboardType="numeric"
-            />
-
-
-
-            <View style={styles.modalButtons}>
-              <Pressable 
-                style={styles.modalCancelButton} 
-                onPress={() => setShowRecipeModal(false)}
-              >
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </Pressable>
-              <Pressable style={styles.modalSaveButton} onPress={addRecipe}>
-                <Text style={styles.modalSaveText}>Add Recipe</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {viewMode === 'list' ? renderProductList() : renderProductDetail()}
     </ParallaxScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  addButton: {
+    position: 'absolute',
+    bottom: 25,
+    right: 15,
+    backgroundColor: '#3b82f6',
+    borderRadius: 24,
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 5,
+  },
   container: {
     flex: 1,
     marginTop: 16,
   },
-  // Search styles
+  searchBox: {
+    height: 40,
+    borderColor: 'gray',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+  },
+  searchBoxContainer: {
+    marginTop: 20,
+  },
+  productContainer: {
+    marginBottom: 12,
+  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -722,10 +331,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#374151',
   },
-  // Product list styles
   productList: {
     flex: 1,
-    marginBottom: 80,
+    height: 570,
+    marginTop: 10,
   },
   productCard: {
     backgroundColor: '#ffffff',
@@ -744,6 +353,7 @@ const styles = StyleSheet.create({
     elevation: 2,
     borderWidth: 1,
     borderColor: '#f3f4f6',
+    position: 'relative',
   },
   iconContainer: {
     width: 48,
@@ -768,12 +378,12 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     flex: 1,
   },
-  productPrice: {
+  stockNumber: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#3b82f6',
+    color: '#6b7280',
   },
-  productCode: {
+  productSku: {
     fontSize: 14,
     color: '#6b7280',
     marginBottom: 8,
@@ -783,63 +393,39 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  stockText: {
-    fontSize: 12,
-    color: '#6b7280',
+  productPrice: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#3b82f6',
   },
-  recipesBadge: {
+  lowStockContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f3f4f6',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    gap: 4,
   },
-  recipesBadgeText: {
+  lowStockText: {
     fontSize: 12,
-    color: '#8b5cf6',
+    color: '#f59e0b',
     fontWeight: '500',
-    marginLeft: 4,
   },
-  // Empty state
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  emptyStateText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#6b7280',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyStateSubtext: {
-    fontSize: 14,
-    color: '#9ca3af',
-    textAlign: 'center',
-  },
-  // Add button
-  addButton: {
+  stockBadge: {
     position: 'absolute',
-    bottom: 25,
-    right: 15,
-    backgroundColor: '#3b82f6',
-    borderRadius: 25,
-    width: 50,
-    height: 50,
+    top: 8,
+    right: 8,
+    backgroundColor: '#ef4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 5,
+    paddingHorizontal: 6,
   },
-  // Detail view styles
+  stockBadgeText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  // Detail View Styles
   detailHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -856,27 +442,16 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
   },
   backButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '500',
-    marginLeft: 4,
-  },
-  editHeaderButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#f3f4f6',
-  },
-  saveButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#10b981',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-  },
-  saveButtonText: {
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '500',
@@ -886,6 +461,9 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#1f2937',
+  },
+  headerSpacer: {
+    width: 80, // Increased to match back button width
   },
   detailContent: {
     flex: 1,
@@ -916,20 +494,15 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     marginBottom: 4,
   },
-  detailProductCode: {
+  detailProductSku: {
     fontSize: 16,
     color: '#6b7280',
-    marginBottom: 4,
+    marginBottom: 8,
   },
   detailProductPrice: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#3b82f6',
-    marginBottom: 4,
-  },
-  detailStockInfo: {
-    fontSize: 14,
-    color: '#6b7280',
   },
   sectionTitle: {
     fontSize: 18,
@@ -937,70 +510,45 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     marginBottom: 16,
   },
-  // Recipes styles
-  recipesHeader: {
+  stockInfo: {
+    flexDirection: 'column',
+    gap: 16,
+  },
+  stockItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    paddingVertical: 8,
   },
-  addRecipeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f3f4f6',
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-  },
-  addRecipeButtonText: {
-    fontSize: 14,
-    color: '#3b82f6',
-    fontWeight: '500',
-    marginLeft: 4,
-  },
-  recipeItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  recipeInfo: {
-    flex: 1,
-  },
-  recipeName: {
+  stockLabel: {
     fontSize: 16,
-    fontWeight: '500',
+    color: '#374151',
+  },
+  stockValue: {
+    fontSize: 16,
+    fontWeight: '600',
     color: '#1f2937',
   },
-  recipeAmount: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginTop: 2,
+  lowStockValue: {
+    color: '#ef4444',
   },
-  removeRecipeButton: {
-    padding: 8,
-    borderRadius: 6,
-    backgroundColor: '#fee2e2',
-  },
-  noRecipesContainer: {
+  stockStatus: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 20,
+    paddingVertical: 8,
   },
-  noRecipesText: {
+  statusIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  statusText: {
     fontSize: 16,
-    color: '#6b7280',
     fontWeight: '500',
   },
-  noRecipesSubtext: {
-    fontSize: 14,
-    color: '#9ca3af',
-    textAlign: 'center',
-    marginTop: 4,
-  },
-  // Action buttons
   actionButtons: {
+    flexDirection: 'column',
     gap: 12,
   },
   actionButton: {
@@ -1013,196 +561,34 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
-  deleteActionButton: {
-    backgroundColor: '#fef2f2',
-    borderColor: '#fecaca',
-  },
   actionButtonText: {
     fontSize: 16,
     fontWeight: '500',
     color: '#3b82f6',
     marginLeft: 12,
   },
-  // Form styles
-  formContent: {
-    flex: 1,
-    paddingTop: 16,
-  },
-  formCard: {
-    marginBottom: 16,
-  },
-  formSectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 16,
-  },
-  formLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  formInput: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    marginBottom: 16,
-  },
-  switchContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  switchLabelContainer: {
-    flex: 1,
-    marginRight: 16,
-  },
-  switchLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#374151',
-  },
-  switchSubLabel: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginTop: 2,
-  },
-  // Modal styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 20,
-    margin: 20,
-    maxHeight: '80%',
-    width: '90%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1f2937',
-  },
-  modalLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-    marginBottom: 8,
-    marginTop: 16,
-  },
-  pickerContainer: {
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-    maxHeight: 200,
-  },
-  stockPicker: {
-    maxHeight: 200,
-  },
-  stockOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  stockOptionSelected: {
-    backgroundColor: '#dbeafe',
-  },
-  stockOptionText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#374151',
-  },
-  stockOptionTextSelected: {
-    color: '#3b82f6',
-  },
-  stockOptionSku: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginTop: 2,
-  },
-  stockOptionSkuSelected: {
-    color: '#1d4ed8',
-  },
-  modalInput: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  unitContainer: {
+  statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 20,
-  },
-  unitOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#f9fafb',
-  },
-  unitOptionSelected: {
-    backgroundColor: '#3b82f6',
-    borderColor: '#3b82f6',
-  },
-  unitOptionText: {
-    fontSize: 14,
-    color: '#374151',
-  },
-  unitOptionTextSelected: {
-    color: '#ffffff',
-  },
-  modalButtons: {
-    flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 20,
   },
-  modalCancelButton: {
-    flex: 1,
-    backgroundColor: '#f3f4f6',
+  statItem: {
+    width: '48%',
+    backgroundColor: '#f9fafb',
     borderRadius: 8,
-    paddingVertical: 12,
-    marginRight: 8,
+    padding: 16,
     alignItems: 'center',
+    marginBottom: 12,
   },
-  modalSaveButton: {
-    flex: 1,
-    backgroundColor: '#3b82f6',
-    borderRadius: 8,
-    paddingVertical: 12,
-    marginLeft: 8,
-    alignItems: 'center',
+  statValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1f2937',
+    marginBottom: 4,
   },
-  modalCancelText: {
-    fontSize: 16,
-    fontWeight: '500',
+  statLabel: {
+    fontSize: 14,
     color: '#6b7280',
-  },
-  modalSaveText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#ffffff',
+    textAlign: 'center',
   },
 });

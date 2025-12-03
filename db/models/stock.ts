@@ -2,21 +2,27 @@ import { SQLiteDatabase } from "expo-sqlite";
 
 export interface StockInterface {
     id: number;
-    sku: string;
+    name: string;
     symbol: string;
+    sku: string;
     quantity: number;
-    purchase_price: number;
+    createdAt: string;
+    updatedAt: string;
 }
 
 class Stock {
     static migrate(db: SQLiteDatabase) {
+        // create stocks table if it doesn't exist
+        // replace schema if needed
         db.execAsync(`
             CREATE TABLE IF NOT EXISTS stocks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
                 symbol TEXT,
                 sku TEXT,
                 quantity INTEGER,
-                purchase_price REAL
+                createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
             );
         `);
     }

@@ -2,7 +2,9 @@ import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedView } from '@/components/themed-view';
 import { Header } from '@/components/ui/header';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import React, { useState } from 'react';
+import { StockInterface } from '@/db/models/stock';
+import { StockService } from '@/db/services/stock';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -42,21 +44,6 @@ interface StockTransaction {
 interface UnitType {
   name: string
 }
-
-const stockData: StockItem[] = [
-  {
-    id: '1',
-    name: 'Wireless Mouse',
-    sku: 'WM-001',
-    currentStock: 45,
-    minStock: 10,
-    maxStock: 100,
-    location: 'A1-B2',
-    lastUpdated: '2025-10-22',
-    status: 'in-stock',
-    symbol: 'kg',
-  },
-];
 
 const transactionData: StockTransaction[] = [
   {
@@ -107,6 +94,8 @@ export default function StockScreen() {
   const [editMode, setEditMode] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [showUnitTypeModal, setShowUnitTypeModal] = useState(false);
+  const [page, setPage] = useState(0);
+  const [stockList, setStockList] = useState<StockInterface[]>([]);
 
   // Form state for add/edit
   const [formData, setFormData] = useState<Partial<StockItem>>({
@@ -115,11 +104,6 @@ export default function StockScreen() {
     currentStock: 0,
     symbol: ''
   });
-
-  const filteredStock = stockData.filter(item =>
-    item.name.toLowerCase().includes(searchText.toLowerCase()) ||
-    item.sku.toLowerCase().includes(searchText.toLowerCase())
-  );
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -152,13 +136,13 @@ export default function StockScreen() {
     setShowAddModal(true);
   };
 
-  const handleEditStock = (item: StockItem) => {
+  const handleEditStock = (item: StockInterface) => {
     setFormData(item);
     setEditMode(true);
     setShowAddModal(true);
   };
 
-  const handleViewDetail = (item: StockItem) => {
+  const handleViewDetail = (item: StockInterface) => {
     setSelectedItem(item);
     setShowDetailModal(true);
   };
@@ -177,7 +161,7 @@ export default function StockScreen() {
     setShowAddModal(false);
   };
 
-  const handleDeleteStock = (item: StockItem) => {
+  const handleDeleteStock = (item: StockInterface) => {
     Alert.alert(
       'Delete Stock',
       `Are you sure you want to delete ${item.name}?`,
@@ -191,12 +175,26 @@ export default function StockScreen() {
     );
   };
 
-  const renderStockItem = ({ item }: { item: StockItem }) => (
+  const getAllStocks = async () => {
+    const stocks = await StockService.getAllStocks({
+      searchQuery: searchText,
+      perPage: 20,
+      page: page,
+    });
+
+    setStockList(stocks);
+  };
+
+  useEffect(() => {
+    getAllStocks();
+  }, [searchText, page]);
+
+  const renderStockItem = ({ item }: { item: StockInterface }) => (
     <Pressable style={styles.stockCard} onPress={() => handleViewDetail(item)}>
       {/* Product Header - Clean and prominent */}
       <View style={styles.stockHeader}>
         <View style={styles.stockInfo}>
-          <Text style={styles.stockName}>{item.name}</Text>
+          <Text style={styles.stockName}>{item.sku}</Text>
           <View style={{ flexDirection: 'row', marginTop: 4, gap: 16 }}>
             <Text style={styles.stockSku}>SKU: {item.sku}</Text>
           </View>
@@ -216,7 +214,7 @@ export default function StockScreen() {
         <View style={[
           styles.statusBadge, 
           { 
-            backgroundColor: getStatusColor(item.status),
+            backgroundColor: getStatusColor('in-stock'),
             flexDirection: 'row',
             alignItems: 'center',
             gap: 4,
@@ -226,10 +224,10 @@ export default function StockScreen() {
           }
         ]}>
           <Text style={styles.statusText}>Stock</Text>
-          <Text style={styles.statusText}>{item.currentStock}</Text>
+          <Text style={styles.statusText}>{item.quantity}</Text>
         </View>
         <Text style={[styles.lastUpdated, { fontSize: 12, color: '#9ca3af' }]}>
-          Updated: {item.lastUpdated}
+          Updated:
         </Text>
       </View>
     </Pressable>
@@ -270,12 +268,6 @@ export default function StockScreen() {
     <ParallaxScrollView>
       <ThemedView style={styles.container}>
         <Header title="Stock Management" subtitle="Monitor and manage your inventory" />
-        
-        <View style={{ marginTop: 16 }}>
-          <Pressable style={styles.addButton} onPress={handleAddStock}>
-            <Text style={styles.addButtonText}> Add Stock </Text>
-          </Pressable>
-        </View>
 
         {/* Tab Navigation */}
         <View style={styles.tabContainer}>
@@ -308,16 +300,17 @@ export default function StockScreen() {
                   placeholder="Search stock..."
                   placeholderTextColor="#9ca3af"
                   value={searchText}
-                  onChangeText={setSearchText}
+                  onChangeText={(e) => {
+                    setSearchText(e);
+                  }}
                 />
               </View>
             </View>
 
             {/* Stock List */}
             <FlatList
-              data={filteredStock}
+              data={stockList}
               renderItem={renderStockItem}
-              keyExtractor={(item) => item.id}
               style={styles.stockList}
               scrollEnabled={false}
             />
