@@ -12,8 +12,6 @@ export interface StockInterface {
 
 class Stock {
     static migrate(db: SQLiteDatabase) {
-        // create stocks table if it doesn't exist
-        // replace schema if needed
         db.execAsync(`
             CREATE TABLE IF NOT EXISTS stocks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -7,8 +7,8 @@ export interface TransactionDetailInterface {
     amount: number;
     quantity: number;
     total: number;
-    created_at: string;
-    updated_at: string;
+    createdAt: string;
+    updatedAt: string;
 }
 
 class TransactionDetail {
@@ -21,8 +21,8 @@ class TransactionDetail {
                 amount REAL,
                 quantity REAL,
                 total REAL,
-                created_at TIMESTAMP,
-                updated_at TIMESTAMP
+                createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
             );
         `);
     }

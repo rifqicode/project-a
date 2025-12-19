@@ -2,14 +2,17 @@ import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedView } from '@/components/themed-view';
 import { Header } from '@/components/ui/header';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import SearchBar from '@/components/ui/searchbar';
 import { StockInterface } from '@/db/models/stock';
 import { StockService } from '@/db/services/stock';
-import React, { useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   FlatList,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -45,39 +48,6 @@ interface UnitType {
   name: string
 }
 
-const transactionData: StockTransaction[] = [
-  {
-    id: '1',
-    itemId: '1',
-    itemName: 'Wireless Mouse',
-    type: 'in',
-    quantity: 20,
-    date: '2025-10-22',
-    reason: 'Purchase Order',
-    reference: 'PO-001'
-  },
-  {
-    id: '2',
-    itemId: '2',
-    itemName: 'USB Cable',
-    type: 'out',
-    quantity: 10,
-    date: '2025-10-21',
-    reason: 'Sales Order',
-    reference: 'SO-045'
-  },
-  {
-    id: '3',
-    itemId: '3',
-    itemName: 'Keyboard',
-    type: 'out',
-    quantity: 5,
-    date: '2025-10-20',
-    reason: 'Sales Order',
-    reference: 'SO-044'
-  }
-];
-
 const unitTypes: UnitType[] = [{
   name: 'kg',
 }, {
@@ -87,18 +57,18 @@ const unitTypes: UnitType[] = [{
 }]
 
 export default function StockScreen() {
-  const [activeTab, setActiveTab] = useState<'list' | 'history'>('list');
   const [selectedItem, setSelectedItem] = useState<StockItem | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [showUnitTypeModal, setShowUnitTypeModal] = useState(false);
-  const [page, setPage] = useState(0);
   const [stockList, setStockList] = useState<StockInterface[]>([]);
+  const [stockHistory, setStockHistory] = useState<any[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Form state for add/edit
-  const [formData, setFormData] = useState<Partial<StockItem>>({
+  const [formData, setFormData] = useState<Partial<StockInterface & { currentStock: number }>>({
     name: '',
     sku: '',
     currentStock: 0,
@@ -128,23 +98,53 @@ export default function StockScreen() {
       name: '',
       sku: '',
       currentStock: 0,
-      minStock: 0,
-      maxStock: 0,
-      location: ''
+      symbol: ''
     });
     setEditMode(false);
     setShowAddModal(true);
   };
 
   const handleEditStock = (item: StockInterface) => {
-    setFormData(item);
+    setFormData({
+      ...item,
+      currentStock: item.quantity // Map quantity to currentStock for form
+    });
     setEditMode(true);
     setShowAddModal(true);
   };
 
-  const handleViewDetail = (item: StockInterface) => {
-    setSelectedItem(item);
+  const handleViewDetail = async (item: StockInterface) => {
+    // Convert StockInterface to StockItem for the modal
+    const stockItem: StockItem = {
+      id: item.id.toString(),
+      name: item.name,
+      sku: item.sku,
+      currentStock: item.quantity,
+      minStock: 0,
+      maxStock: 0,
+      location: '',
+      lastUpdated: item.updatedAt,
+      status: item.quantity > 0 ? 'in-stock' : 'out-of-stock',
+      symbol: item.symbol
+    };
+    setSelectedItem(stockItem);
+    
+    // Fetch stock history (last 3 records)
+    try {
+      const history = await StockService.getStockHistory(item.id);
+      setStockHistory(history.slice(0, 3)); // Get only the last 3
+    } catch (error) {
+      console.error('Error fetching stock history:', error);
+      setStockHistory([]);
+    }
+    
     setShowDetailModal(true);
+  };
+
+  const handleCloseDetailModal = async () => {
+    setShowDetailModal(false);
+    // Refresh data when closing detail modal in case data changed
+    await getAllStocks();
   };
 
   const handleSelectUnitType = (item: UnitType) => {
@@ -155,47 +155,129 @@ export default function StockScreen() {
     setShowUnitTypeModal(false);
   };
 
-  const handleSaveStock = () => {
-    // Here you would typically save to your backend
-    Alert.alert('Success', `Stock ${editMode ? 'updated' : 'added'} successfully!`);
-    setShowAddModal(false);
+  // Helper function to add sample data (for testing)
+  const addSampleData = async () => {
+    try {
+      const sampleStocks = [
+        { name: 'White Sugar', symbol: 'kg', sku: 'SUGAR-001', quantity: 100 },
+        { name: 'All Purpose Flour', symbol: 'kg', sku: 'FLOUR-001', quantity: 150 },
+        { name: 'Cooking Oil', symbol: 'liter', sku: 'OIL-001', quantity: 50 },
+        { name: 'Salt', symbol: 'kg', sku: 'SALT-001', quantity: 200 },
+        { name: 'Black Pepper', symbol: 'gram', sku: 'PEPPER-001', quantity: 500 },
+      ];
+
+      for (const stock of sampleStocks) {
+        await StockService.createStock(stock);
+      }
+
+      Alert.alert('Success', `Added ${sampleStocks.length} sample stocks!`);
+      await getAllStocks();
+    } catch (error) {
+      console.error('Error adding sample data:', error);
+      Alert.alert('Error', 'Failed to add sample data');
+    }
   };
 
-  const handleDeleteStock = (item: StockInterface) => {
+  const handleSaveStock = async () => {
+    try {
+      if (!formData.name || !formData.sku || !formData.symbol) {
+        Alert.alert('Error', 'Please fill in all required fields');
+        return;
+      }
+
+      if (editMode && formData.id) {
+        // Update existing stock
+        await StockService.updateStock(formData.id, {
+          name: formData.name,
+          symbol: formData.symbol,
+          sku: formData.sku,
+          quantity: formData.currentStock || 0,
+        });
+        Alert.alert('Success', 'Stock updated successfully!');
+      } else {
+        // Create new stock
+        await StockService.createStock({
+          name: formData.name,
+          symbol: formData.symbol,
+          sku: formData.sku,
+          quantity: formData.currentStock || 0,
+        });
+        Alert.alert('Success', 'Stock added successfully!');
+      }
+      
+      setShowAddModal(false);
+    } catch (error) {
+      console.error('Error saving stock:', error);
+      Alert.alert('Error', 'Failed to save stock. Please try again.');
+    } finally {
+      // Always refresh the list after save attempt
+      await getAllStocks();
+    }
+  };
+
+  const handleDeleteStock = async (item: StockInterface) => {
     Alert.alert(
       'Delete Stock',
       `Are you sure you want to delete ${item.name}?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => {
-          // Here you would delete from your backend
-          Alert.alert('Success', 'Stock deleted successfully!');
+        { text: 'Delete', style: 'destructive', onPress: async () => {
+          try {
+            await StockService.deleteStock(item.id);
+            Alert.alert('Success', 'Stock deleted successfully!');
+          } catch (error) {
+            console.error('Error deleting stock:', error);
+            Alert.alert('Error', 'Failed to delete stock. Please try again.');
+          } finally {
+            // Always refresh the list after delete attempt
+            await getAllStocks();
+          }
         }}
       ]
     );
   };
 
-  const getAllStocks = async () => {
-    const stocks = await StockService.getAllStocks({
-      searchQuery: searchText,
-      perPage: 20,
-      page: page,
-    });
+  const getAllStocks = useCallback(async () => {
+    try {
+      console.log('Fetching stocks with query:', searchText);
+      const stocks = await StockService.getAllStocks({
+        searchQuery: searchText,
+        perPage: 20,
+        page: 0,
+      });
+      console.log('Fetched stocks:', stocks.length, 'items');
+      setStockList(stocks);
+    } catch (error) {
+      console.error('Error fetching stocks:', error);
+      Alert.alert('Error', 'Failed to load stocks. Please try again.');
+    }
+  }, [searchText]);
 
-    setStockList(stocks);
-  };
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await getAllStocks();
+    setRefreshing(false);
+  }, [getAllStocks]);
 
   useEffect(() => {
     getAllStocks();
-  }, [searchText, page]);
+  }, [getAllStocks]);
+
+  // Refresh data whenever user navigates to this screen
+  useFocusEffect(
+    useCallback(() => {
+      console.log('Stock screen focused - refreshing data');
+      getAllStocks();
+    }, [getAllStocks])
+  );
 
   const renderStockItem = ({ item }: { item: StockInterface }) => (
     <Pressable style={styles.stockCard} onPress={() => handleViewDetail(item)}>
       {/* Product Header - Clean and prominent */}
       <View style={styles.stockHeader}>
         <View style={styles.stockInfo}>
-          <Text style={styles.stockName}>{item.sku}</Text>
-          <View style={{ flexDirection: 'row', marginTop: 4, gap: 16 }}>
+          <Text style={styles.stockName}>{item.name}</Text>
+          <View style={{ flexDirection: 'row', marginTop: 10, gap: 1 }}>
             <Text style={styles.stockSku}>SKU: {item.sku}</Text>
           </View>
         </View>
@@ -214,7 +296,7 @@ export default function StockScreen() {
         <View style={[
           styles.statusBadge, 
           { 
-            backgroundColor: getStatusColor('in-stock'),
+            backgroundColor: item.quantity > 0 ? '#10b981' : '#ef4444',
             flexDirection: 'row',
             alignItems: 'center',
             gap: 4,
@@ -223,107 +305,84 @@ export default function StockScreen() {
             borderRadius: 20
           }
         ]}>
-          <Text style={styles.statusText}>Stock</Text>
-          <Text style={styles.statusText}>{item.quantity}</Text>
+          <Text style={styles.statusText}>Stock: {item.quantity} {item.symbol}</Text>
         </View>
         <Text style={[styles.lastUpdated, { fontSize: 12, color: '#9ca3af' }]}>
-          Updated:
+          {new Date(item.updatedAt).toLocaleDateString()}
         </Text>
       </View>
     </Pressable>
-  );
-
-  const renderTransactionItem = ({ item }: { item: StockTransaction }) => (
-    <View style={styles.transactionCard}>
-      <View style={styles.transactionHeader}>
-        <View style={[
-          styles.transactionType, 
-          { backgroundColor: item.type === 'in' ? '#dcfce7' : '#fee2e2' }
-        ]}>
-          <IconSymbol 
-            name={item.type === 'in' ? 'arrow.down.circle.fill' : 'arrow.up.circle.fill'} 
-            size={20} 
-            color={item.type === 'in' ? '#16a34a' : '#dc2626'} 
-          />
-          <Text style={[
-            styles.transactionTypeText,
-            { color: item.type === 'in' ? '#16a34a' : '#dc2626' }
-          ]}>
-            {item.type === 'in' ? 'Stock In' : 'Stock Out'}
-          </Text>
-        </View>
-        <Text style={styles.transactionDate}>{item.date}</Text>
-      </View>
-      
-      <Text style={styles.transactionItemName}>{item.itemName}</Text>
-      <View style={styles.transactionDetails}>
-        <Text style={styles.transactionQuantity}>Quantity: {item.quantity}</Text>
-        <Text style={styles.transactionReason}>{item.reason}</Text>
-        <Text style={styles.transactionReference}>Ref: {item.reference}</Text>
-      </View>
-    </View>
   );
 
   return (
     <ParallaxScrollView>
       <ThemedView style={styles.container}>
         <Header title="Stock Management" subtitle="Monitor and manage your inventory" />
-
-        {/* Tab Navigation */}
-        <View style={styles.tabContainer}>
-          <Pressable 
-            style={[styles.tab, activeTab === 'list' && styles.activeTab]}
-            onPress={() => setActiveTab('list')}
-          >
-            <Text style={[styles.tabText, activeTab === 'list' && styles.activeTabText]}>
-              Stock List
-            </Text>
-          </Pressable>
-          <Pressable 
-            style={[styles.tab, activeTab === 'history' && styles.activeTab]}
-            onPress={() => setActiveTab('history')}
-          >
-            <Text style={[styles.tabText, activeTab === 'history' && styles.activeTabText]}>
-              Stock History
-            </Text>
+        
+        <View style={{
+          alignItems: 'flex-end',
+          paddingHorizontal: 1,
+          marginBottom: 10,
+        }}>
+          <Pressable style={{
+            backgroundColor: '#3b82f6',
+            paddingVertical: 5,
+            paddingHorizontal: 16,
+            borderRadius: 12,
+            alignItems: 'center',
+            marginTop: 10,
+            width: 60,
+            alignContent: 'center',
+          }} onPress={handleAddStock}>
+            <Text style={styles.addButtonText}>+</Text>
           </Pressable>
         </View>
 
-        {activeTab === 'list' && (
-          <>
-            {/* Search and Add Button */}
-            <View style={styles.actionRow}>
-              <View style={styles.searchContainer}>
-                <IconSymbol name="magnifyingglass" size={20} color="#6b7280" />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Search stock..."
-                  placeholderTextColor="#9ca3af"
-                  value={searchText}
-                  onChangeText={(e) => {
-                    setSearchText(e);
-                  }}
-                />
-              </View>
-            </View>
+        {/* Search Bar */}
+        <SearchBar
+          value={searchText}
+          onChangeText={setSearchText}
+          placeholder="Search stock..."
+        />
 
-            {/* Stock List */}
-            <FlatList
-              data={stockList}
-              renderItem={renderStockItem}
-              style={styles.stockList}
-              scrollEnabled={false}
-            />
-          </>
+        {/* Debug: Add sample data button - Remove this after testing */}
+        {stockList.length === 0 && !searchText && (
+          <View style={{ paddingHorizontal: 16, marginTop: 16, marginBottom: 8 }}>
+            <Pressable 
+              style={[styles.sampleDataButton]} 
+              onPress={addSampleData}
+            >
+              <IconSymbol name="sparkles" size={20} color="#ffffff" />
+              <Text style={styles.sampleDataButtonText}>Add Sample Data (Testing)</Text>
+            </Pressable>
+          </View>
         )}
 
-        {activeTab === 'history' && (
+        {/* Stock List */}
+        {stockList.length === 0 ? (
+          <View style={styles.emptyState}>
+            <IconSymbol name="tray" size={48} color="#9ca3af" />
+            <Text style={styles.emptyStateText}>No stocks found</Text>
+            <Text style={styles.emptyStateSubtext}>
+              {searchText ? 'Try a different search term' : 'Add your first stock item'}
+            </Text>
+          </View>
+        ) : (
           <FlatList
-            data={transactionData}
-            renderItem={renderTransactionItem}
-            keyExtractor={(item) => item.id}
-            style={styles.transactionList}
+            data={stockList}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={renderStockItem}
+            style={styles.stockList}
             scrollEnabled={false}
+            contentContainerStyle={styles.stockListContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={['#3b82f6']}
+                tintColor="#3b82f6"
+              />
+            }
           />
         )}
 
@@ -366,8 +425,8 @@ export default function StockScreen() {
                     <Text style={styles.inputLabel}>Stock Amount</Text>
                     <TextInput
                       style={styles.textInput}
-                      value={formData.minStock?.toString()}
-                      onChangeText={(text) => setFormData({...formData, minStock: parseInt(text) || 0})}
+                      value={formData.currentStock?.toString()}
+                      onChangeText={(text) => setFormData({...formData, currentStock: parseInt(text) || 0})}
                       placeholder="0"
                       keyboardType="numeric"
                     />
@@ -418,7 +477,7 @@ export default function StockScreen() {
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Stock Details</Text>
-                <Pressable onPress={() => setShowDetailModal(false)}>
+                <Pressable onPress={handleCloseDetailModal}>
                   <IconSymbol name="xmark" size={24} color="#6b7280" />
                 </Pressable>
               </View>
@@ -435,7 +494,7 @@ export default function StockScreen() {
                   </View>
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Current Stock</Text>
-                    <Text style={styles.detailValue}>{selectedItem.currentStock}</Text>
+                    <Text style={styles.detailValue}>{selectedItem.currentStock} {selectedItem.symbol}</Text>
                   </View>
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Status</Text>
@@ -445,13 +504,48 @@ export default function StockScreen() {
                   </View>
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Last Updated</Text>
-                    <Text style={styles.detailValue}>{selectedItem.lastUpdated}</Text>
+                    <Text style={styles.detailValue}>{new Date(selectedItem.lastUpdated).toLocaleDateString()}</Text>
                   </View>
+
+                  {/* Stock History Section */}
+                  {stockHistory.length > 0 && (
+                    <>
+                      <View style={styles.historySeparator} />
+                      <Text style={styles.historyTitle}>Recent History (Last 3)</Text>
+                      {stockHistory.map((history, index) => (
+                        <View key={history.id} style={styles.historyItem}>
+                          <View style={styles.historyIconContainer}>
+                            <IconSymbol 
+                              name={history.transactionType === 'IN' ? 'arrow.down.circle.fill' : 'arrow.up.circle.fill'}
+                              size={24}
+                              color={history.transactionType === 'IN' ? '#10b981' : '#ef4444'}
+                            />
+                          </View>
+                          <View style={styles.historyContent}>
+                            <View style={styles.historyHeader}>
+                              <Text style={[
+                                styles.historyType,
+                                { color: history.transactionType === 'IN' ? '#10b981' : '#ef4444' }
+                              ]}>
+                                {history.transactionType === 'IN' ? 'Stock In' : 'Stock Out'}
+                              </Text>
+                              <Text style={styles.historyQuantity}>
+                                {history.transactionType === 'IN' ? '+' : '-'}{history.quantity} {selectedItem.symbol}
+                              </Text>
+                            </View>
+                            <Text style={styles.historyDate}>
+                              {new Date(history.createdAt).toLocaleDateString()} {new Date(history.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                    </>
+                  )}
                 </ScrollView>
               )}
 
               <View style={styles.modalActions}>
-                <Pressable style={styles.cancelButton} onPress={() => setShowDetailModal(false)}>
+                <Pressable style={styles.cancelButton} onPress={handleCloseDetailModal}>
                   <Text style={styles.cancelButtonText}>Close</Text>
                 </Pressable>
               </View>
@@ -570,19 +664,32 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     marginLeft: 12,
+    height: 40,
     fontSize: 16,
     color: '#374151',
   },
-  addButton: {
+  floatingButton: {
+    position: 'absolute',
+    bottom: 25,
+    right: 15,
     backgroundColor: '#3b82f6',
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: 24,
+    width: 48,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 5,
   },
   addButtonText: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: 25,
     fontWeight: '600',
   },
   stockList: {
@@ -851,5 +958,84 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
+  },
+  sampleDataButton: {
+    backgroundColor: '#10b981',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  sampleDataButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  stockListContent: {
+    paddingBottom: 20,
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 20,
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#374151',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+  },
+  historySeparator: {
+    height: 1,
+    backgroundColor: '#e5e7eb',
+    marginVertical: 16,
+  },
+  historyTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 12,
+  },
+  historyItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  historyIconContainer: {
+    marginRight: 12,
+  },
+  historyContent: {
+    flex: 1,
+  },
+  historyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  historyType: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  historyQuantity: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  historyDate: {
+    fontSize: 12,
+    color: '#9ca3af',
+    marginTop: 4,
   },
 });

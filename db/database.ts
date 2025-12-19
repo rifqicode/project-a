@@ -8,48 +8,66 @@ import TransactionDetail from '@/db/models/transaction_detail';
 import { openDatabaseAsync, SQLiteDatabase } from 'expo-sqlite';
 
 let db: SQLiteDatabase | null = null;
-
-const runMigration = async (db: SQLiteDatabase) => {
-    const migrations : { version: number; query: string; }[] = [];
-
-    const result: { version: number; } | null = await db.getFirstAsync(`SELECT version FROM database_version ORDER BY id DESC LIMIT 1;`);
-    let currentVersion = result ? result.version : 0;
-
-    for (const migration of migrations) {
-        if (migration.version && migration.version > currentVersion) {
-            await db.execAsync(migration.query);
-            currentVersion = migration.version;
-            await db.execAsync(`UPDATE database_version SET version = ${currentVersion} WHERE id = (SELECT id FROM database_version ORDER BY id DESC LIMIT 1);`);
-        }
-    }
-}
+let isInitializing = false;
+let initPromise: Promise<SQLiteDatabase> | null = null;
 
 export async function getDatabase() {
-    if (!db) {
-        db = await openDatabaseAsync('app.db');
-        // Migrate tables
-        await Promise.all([
-            Product.migrate(db),
-            ProductRecipes.migrate(db),
-            Stock.migrate(db),
-            StockHistory.migrate(db),
-            Transaction.migrate(db),
-            Setting.migrate(db),
-            TransactionDetail.migrate(db),
-            db.execAsync(`
+    if (db) {
+        return db;
+    }
+
+    // If already initializing, wait for that initialization to complete
+    if (isInitializing && initPromise) {
+        return initPromise;
+    }
+
+    isInitializing = true;
+    initPromise = (async () => {
+        try {
+            const database = await openDatabaseAsync('app.db');
+            
+            // Migrate tables
+            await Promise.all([
+                Product.migrate(database),
+                ProductRecipes.migrate(database),
+                Stock.migrate(database),
+                StockHistory.migrate(database),
+                Transaction.migrate(database),
+                Setting.migrate(database),
+                TransactionDetail.migrate(database),
+            ]);
+
+            // Initialize database version table separately
+            await database.execAsync(`
                 CREATE TABLE IF NOT EXISTS database_version (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     version INTEGER NOT NULL
                 );
-                insert into database_version (version) values (1);
-            `)
-        ]);
+            `);
 
-        // Running migrations for existing tables to update schema if needed
-        await runMigration(db)
-    }
-    
-    return db;
+            // Check if version exists before inserting
+            const versionExists = await database.getFirstAsync(
+                'SELECT COUNT(*) as count FROM database_version'
+            );
+            
+            if ((versionExists as any)?.count === 0) {
+                await database.runAsync(
+                    'INSERT INTO database_version (version) VALUES (?)',
+                    [1]
+                );
+            }
+
+            db = database;
+            isInitializing = false;
+            return database;
+        } catch (error) {
+            isInitializing = false;
+            initPromise = null;
+            throw error;
+        }
+    })();
+
+    return initPromise;
 }
 
 export async function closeDatabase() {

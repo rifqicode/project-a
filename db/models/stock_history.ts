@@ -5,6 +5,8 @@ export interface StockHistoryInterface {
     StockId: number;
     transactionType: 'IN' | 'OUT';
     quantity: number;
+    createdAt: string;
+    updatedAt: string;
 }
 
 class StockHistory {
@@ -15,7 +17,8 @@ class StockHistory {
                 StockId INTEGER NOT NULL,
                 transactionType TEXT CHECK( transactionType IN ('IN', 'OUT') ) NOT NULL,
                 quantity INTEGER NOT NULL,
-                FOREIGN KEY (StockId) REFERENCES stocks(id)
+                createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
             );
         `);
     }

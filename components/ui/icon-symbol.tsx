@@ -29,6 +29,11 @@ const MAPPING = {
   'items': 'inventory',
   'pencil': 'edit',
   'trash': 'delete',
+  'production': 'factory',
+  'receipt': 'receipt',
+  'checkmark': 'verified',
+  'chevron.left': 'chevron-left',
+  'checklist': 'check-circle',
 } as IconMapping;
 
 /**

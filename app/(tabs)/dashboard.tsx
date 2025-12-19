@@ -41,6 +41,8 @@ export default function HomeScreen() {
             </Card>
           </View>
         </View>
+
+        
       </ThemedView>
     </ParallaxScrollView>
   );

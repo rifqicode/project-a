@@ -1,30 +1,26 @@
 import { SQLiteDatabase } from "expo-sqlite";
 
-export interface TransactionDetailInterface {
+export interface TransactionInterface {
     id: number;
-    TransactionId: number;
-    ProductId: number;
-    number: string;
-    amount: number;
-    quantity: number;
-    total: number;
-    created_at: string;
-    updated_at: string;
+    transactionNumber: string;
+    total_amount: number;
+    total_quantity: number;
+    total_price: number;
+    createdAt: string;
+    updatedAt: string;
 }
 
 class Transaction {
     static migrate(db: SQLiteDatabase) {
         db.execAsync(`
-            CREATE TABLE IF NOT EXISTS transaction_details (
+            CREATE TABLE IF NOT EXISTS transactions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                TransactionId INTEGER,
-                ProductId INTEGER,
-                number TEXT,
-                amount REAL,
-                quantity REAL,
-                total REAL,
-                created_at TIMESTAMP,
-                updated_at TIMESTAMP
+                transactionNumber TEXT,
+                total_amount INTEGER,
+                total_quantity INTEGER,
+                total_price INTEGER,
+                createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
             );
         `);
     }
